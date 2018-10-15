@@ -35,11 +35,13 @@ class ArdMediathekDownloader:
         Returns the URL if everything is fine with it otherwise rises a ValueError.
         """
         regex = re.compile(
-            r'^(?:http)s?://'  # http:// or https://
-            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
-            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-            r'(?::\d+)?'  # optional port
-            r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+            r"^(?:http)s?://"  # http:// or https://
+            r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|"  # domain...
+            r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"  # ...or ip
+            r"(?::\d+)?"  # optional port
+            r"(?:/?|[/?]\S+)$",
+            re.IGNORECASE,
+        )
         try:
             return re.match(regex, url).group(0)
         except:
@@ -60,35 +62,43 @@ class ArdMediathekDownloader:
         self._download_from_url(video)
 
     def _default_filename_if_empty(self):
-        if self.filename is None:  # no filename was given - override it with default value
+        if (
+            self.filename is None
+        ):  # no filename was given - override it with default value
             self.filename = os.path.join(os.getcwd(), self.default_filename)
-            print(f"Since no filename was given the default value '{os.path.basename(self.filename)}' will be used.")
+            print(
+                f"Since no filename was given the default value '{os.path.basename(self.filename)}' will be used."
+            )
 
     def _fetch_media_information(self):
         # get documentId from HTML
-        doc_id = re.search(r'documentId=(\d+)', self.url)
+        doc_id = re.search(r"documentId=(\d+)", self.url)
         if doc_id is None:
             raise RuntimeError("The document id could not be found.")
         # request json file from Mediathek
-        r = requests.get(f"http://www.ardmediathek.de/play/media/{doc_id.group(1)}?devicetype=pc&features")
-        if 'application/json' not in r.headers.get('content-type'):
-            raise RuntimeError("The server didn't reply with JSON which indicates that an error occured.")
+        r = requests.get(
+            f"http://www.ardmediathek.de/play/media/{doc_id.group(1)}?devicetype=pc&features"
+        )
+        if "application/json" not in r.headers.get("content-type"):
+            raise RuntimeError(
+                "The server didn't reply with JSON which indicates that an error occured."
+            )
         json = r.json()
         return json
 
     def _generate_subtitle_url(self, json):
         # get subtitle URL from JSON
-        if '_subtitleUrl' in json:
-            self.subtitle_url = json['_subtitleUrl']
+        if "_subtitleUrl" in json:
+            self.subtitle_url = json["_subtitleUrl"]
 
     def _generate_video_url(self, json):
         # if video is available in the desired quality, get that url, else get the best available
-        medias = json['_mediaArray'][0]['_mediaStreamArray']
+        medias = json["_mediaArray"][0]["_mediaStreamArray"]
         if len(medias) >= self.quality + 1:
-            video = medias[self.quality]['_stream']
+            video = medias[self.quality]["_stream"]
         else:
-            video = medias[-1]['_stream']
-        if not video.startswith('http:') and not video.startswith('https:'):
+            video = medias[-1]["_stream"]
+        if not video.startswith("http:") and not video.startswith("https:"):
             video = "http:" + video
         return video
 
@@ -96,12 +106,16 @@ class ArdMediathekDownloader:
         # request and store video
         r = requests.get(video_url, stream=True)
         chunk_size = 4096
-        with open(self.filename, 'wb') as fd:
-            filesize = int(r.headers['content-length']) / 1024 ** 2
+        with open(self.filename, "wb") as fd:
+            filesize = int(r.headers["content-length"]) / 1024 ** 2
             done = 0
             print(f"Downloading video. Download size: {filesize:.2f}MB")
             print(f"Downloading destination:{self.filename}")
-            bar = IncrementalBar('Downloading', suffix='%(percent).2f%% %(index).2fMB/%(max).2fMB', max=filesize)
+            bar = IncrementalBar(
+                "Downloading",
+                suffix="%(percent).2f%% %(index).2fMB/%(max).2fMB",
+                max=filesize,
+            )
 
             for chunk in r.iter_content(chunk_size=chunk_size):
                 done = done + chunk_size / 1024 ** 2
@@ -138,9 +152,11 @@ class ArdMediathekDownloader:
             raise RuntimeError("Video does not contain subtitles")
 
         ut_file = requests.get(self.subtitle_url).text
-        with open(os.path.splitext(self.filename)[0] + '.srt', 'w') as f:
+        with open(os.path.splitext(self.filename)[0] + ".srt", "w") as f:
             f.write(ut_file)
-        print(f"subtitles saved as {(os.path.splitext(os.path.basename(self.filename))[0]+'.srt')}")
+        print(
+            f"subtitles saved as {(os.path.splitext(os.path.basename(self.filename))[0]+'.srt')}"
+        )
 
         # subtitles are in Timed Text Authoring Format V1.0 (DFXP http://www.w3.org/2006/10/ttaf1)
         # ut = pycaption.DFXPReader().read(ut_file)
@@ -149,7 +165,7 @@ class ArdMediathekDownloader:
 
         # if self.filename is None: # no filename was given - override it with default value
         #    self.filename = os.path.join(os.getcwd(), self.default_filename)
-        #    
+        #
         # with open(os.path.splitext(self.filename)[0]+'.srt', 'wb') as f:
         #    f.write(pycaption.SRTWriter().write(ut))
         # print(f"subtitles saved as {(os.path.splitext(os.path.basename(self.filename))[0]+'.srt')}")
@@ -157,12 +173,28 @@ class ArdMediathekDownloader:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Commandline python script tool to download videos from the online ARD mediathek. Version: %s' % VERSION)
+        description="Commandline python script tool to download videos from the online ARD mediathek. Version: %s"
+        % VERSION
+    )
 
-    parser.add_argument('url', type=str, help='URL pointing to the mediathek video')
-    parser.add_argument('--filename', '-f', type=str, default=None, help='target filename')
-    parser.add_argument('--quality', '-q', type=int, help='set the desired video quality', default=3, choices=[1, 2, 3])
-    parser.add_argument('--subtitles', '-ut', action="store_true", help='download subtitle in srt format')
+    parser.add_argument("url", type=str, help="URL pointing to the mediathek video")
+    parser.add_argument(
+        "--filename", "-f", type=str, default=None, help="target filename"
+    )
+    parser.add_argument(
+        "--quality",
+        "-q",
+        type=int,
+        help="set the desired video quality",
+        default=3,
+        choices=[1, 2, 3],
+    )
+    parser.add_argument(
+        "--subtitles",
+        "-ut",
+        action="store_true",
+        help="download subtitle in srt format",
+    )
 
     args = parser.parse_args()
 
@@ -176,4 +208,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
